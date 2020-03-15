@@ -10,25 +10,16 @@ namespace SerialReader
 {
     public static class SerialProcessor
     {
-        private const char SPLIT_MARK = '#';
-        private const char TRIM_CHAR = '\0';
+        private const string SPLIT_STRING_MARK = "#";
         private const string TRIM_STRING = "\0";
-        private static readonly ConcurrentQueue<char> Datas = new ConcurrentQueue<char>();
 
-        private static readonly ConcurrentQueue<string> Datas2 = new ConcurrentQueue<string>();
+        private static readonly ConcurrentQueue<string> Datas = new ConcurrentQueue<string>();
 
         public static event SaveDataHandler OnSaveData;
 
         public static void PushData(string data)
         {
-            Datas2.Enqueue(data);
-
-            //Datas.Union(data.AsEnumerable());
-
-            //data.Where(x => x != TRIM_CHAR).ToList().ForEach(x =>
-            //{
-            //    Datas.Enqueue(x);
-            //});
+            Datas.Enqueue(data.Replace(TRIM_STRING, string.Empty).Trim());
         }
 
         public static string SaveData()
@@ -39,63 +30,30 @@ namespace SerialReader
             return string.Empty;
         }
 
-        private async static void ProcessData2()
-        {
-            Memory<char> memory = new Memory<char>();
-            while (true)
-            {
-                if (Datas.Count > 0)
-                {
-                    memory = memory.ToArray().Union(Datas.ToArray()).ToArray();
-                    Datas.Clear();
-
-                    if (memory.Span.Contains(SPLIT_MARK))
-                    {
-                        int mi = memory.Span.IndexOf(SPLIT_MARK);
-                        int ml = memory.Length;
-                        string value = memory.Slice(0, mi).ToString().Replace(TRIM_STRING, string.Empty).Trim();
-                        if (value.Length > 0)
-                        {
-                            var requestData = new DeviceData
-                            {
-                                Data = value,
-                                CreationTime = DateTime.Now
-                            };
-
-                            await OnSaveData?.Invoke(requestData);
-
-                            memory = memory.Slice(mi, ml - mi - 1);
-                        }
-                    }
-                }
-            }
-        }
-
         private async static void ProcessData()
         {
             StringBuilder sb = new StringBuilder();
             while (true)
             {
-                if (Datas.Count > 0 && Datas.TryDequeue(out char result))
+                if (Datas.Count > 0 && Datas.TryDequeue(out string result))
                 {
-                    if (result != SPLIT_MARK)
+                    sb.Append(result);
+
+                    if (result.Contains(SPLIT_STRING_MARK))
                     {
-                        sb.Append(result);
-                    }
-                    else
-                    {
-                        string value = sb.ToString().Replace(TRIM_STRING, string.Empty).Trim();
-                        if (value.Length > 0)
+                        string[] dataline = sb.ToString().Split(SPLIT_STRING_MARK);
+
+                        if (dataline.Length > 0)
                         {
                             var requestData = new DeviceData
                             {
-                                Data = value,
+                                Data = dataline[0].Replace(TRIM_STRING, string.Empty).Trim(),
                                 CreationTime = DateTime.Now
                             };
 
                             await OnSaveData?.Invoke(requestData);
 
-                            sb.Clear();
+                            sb = sb.Replace(dataline[0] + SPLIT_STRING_MARK, string.Empty);
                         }
                     }
                 }
@@ -106,5 +64,6 @@ namespace SerialReader
             }
 
         }
+
     }
 }
